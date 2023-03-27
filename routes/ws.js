@@ -1,11 +1,15 @@
-const express = require("express");
 const socketIO = require("socket.io");
 
+const socketIOHandler = (http, corsOptions) => {
+    var io = socketIO(http, { cors: corsOptions });
 
-const socketIOHandler = (http) => {
-    var io = socketIO(http);
+    io.sockets.on("connect", function (socket) {
+        console.log("Client connected");
+        let handshakeData = socket.request;
+        console.log(handshakeData._query["userID"]);
+    });
 
-    
+
 }
 
 module.exports = {socketIOHandler};

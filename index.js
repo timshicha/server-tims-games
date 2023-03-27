@@ -1,3 +1,4 @@
+require("dotenv").config();
 const express = require("express");
 const app = express();
 const http = require("http").createServer(app);
@@ -10,13 +11,13 @@ const prefix = "/api";
 // Set up CORS to allow requests from our client
 const cors = require("cors");
 corsOptions = {
-    origin: "http://localhost:5000",
+    origin: process.env.CLIENT_URL,
     optionsSuccessStatus: 200
 }
 app.use(cors(corsOptions));
 
-
 app.use(prefix, testRoutes);
-socketIOHandler(http);
+
+socketIOHandler(http, corsOptions);
 
 http.listen(PORT, () => { console.log(`Server running on port ${PORT}`) });
