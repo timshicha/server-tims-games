@@ -21,7 +21,6 @@ class NewAccounts {
     // Remove all other accountCreation objects with same email
     static removeNewEmailAccounts = (email) => {
         for (const [key, value] of Object.entries(this.newAccounts)) {
-            console.log("Pair:", key, value);
             delete this.newAccounts[key];
         }
     }
@@ -45,33 +44,33 @@ const createAccountSendEmail = (req, res) => {
     req.on("end", async () => {
         body = JSON.parse(body);
         let email = body.email;
-        console.log(body);
 
         // Make sure this email doesn't exist in the database already
         await client.connect()
             .catch(() => {
                 console.log("DB connection failed in createAccountSendEmail()");
-                res.status(200).json({ "success": "false", "reason": "A server error occured" });
+                res.status(200).json({ "success": false, "reason": "A server error occured" });
         });
         let user = await client.db("playthosegames").collection("users").findOne({ "email": email })
             .catch(() => {
                 console.log("DB search failed in createAccountSendEmail()");
-                res.status(200).json({ "success": "false", "reason": "A server error occured" });
+                res.status(200).json({ "success": false, "reason": "A server error occured" });
 
         });
         if (user) {
-            res.status(200).json({ "success": "false", "reason": "An account with this email already exists." });
+            res.status(200).json({ "success": false, "reason": "An account with this email already exists." });
         }
         else {
             let code = Math.floor(Math.random() * 1000000);
             let accountCreationID = crypto.randomUUID();
             // If email send failed
-            if (!sendEmail(email, "Email Verification Code", "", confirmEmail(code))) {
-                res.status(200).json({ "success": "false", "reason": "Count not send verification email." });
+            let emailSuccess = await sendEmail(email, "Email Verification Code", "", confirmEmail(code));
+            if (!emailSuccess) {
+                res.status(200).json({ "success": false, "reason": "Could not send verification code to this email." });
             }
             else {
                 NewAccounts.addNewAccount(accountCreationID, email, code, VERIFY_EMAIL_ATTEMPTS);
-                res.status(200).json({ "success": "true", "accountCreationID": accountCreationID });
+                res.status(200).json({ "success": true, "accountCreationID": accountCreationID });
             }
         }
     });
@@ -89,23 +88,24 @@ const createAccountVerifyEmail = (req, res) => {
         let code = parseInt(body.code);
 
         // Body variables must be present, and creation ID must exist
+        // If programmed correctly in front-end, this would be an issue with the code expiring
         if (!accountCreationID || !NewAccounts.newAccounts[accountCreationID] || !code) {
-            res.status(200).json({ "success": "false", "reason": "Could not verify email.", "blocked": "false" });
+            res.status(200).json({ "success": false, "reason": "The code expired. Please try signing up again.", "blocked": "false" });
         }
         // Verify that the code is correct
         else if (NewAccounts.newAccounts[accountCreationID].code === code) {
             NewAccounts.newAccounts[accountCreationID].verified = true;
-            res.status(200).json({ "success": "true" });
+            res.status(200).json({ "success": true });
         }
         else {
             NewAccounts.newAccounts[accountCreationID].attemptsRemaining -= 1;
             // If the user ran out of attempts
             if (NewAccounts.newAccounts[accountCreationID].attemptsRemaining <= 0) {
                 NewAccounts.removeNewAccount(accountCreationID);
-                res.status(200).json({"success": "false", "reason": "The code is not correct.", "blocked": "true"});
+                res.status(200).json({"success": false, "reason": "The code is not correct.", "blocked": "true"});
             }
             else {
-                res.status(200).json({ "success": "false", "reason": "The code is not correct.", "blocked": "false" });
+                res.status(200).json({ "success": false, "reason": "The code is not correct.", "blocked": "false" });
             }
         }
     });
@@ -127,12 +127,12 @@ const createAccountUsernamePassword = (req, res) => {
 
         // Make sure all necessary data was send and accountCreationID exists
         if (!accountCreationID || !username || !password || !(accountCreationDetails = NewAccounts.newAccounts[accountCreationID])) {
-            res.status(200).json({ "success": "false", "reason": "Could not create account." });
+            res.status(200).json({ "success": false, "reason": "Could not create account." });
         }
         else {
             // If the email is not verified
             if (!accountCreationDetails.verified) {
-                res.status(200).json({ "success": "false", "reason": "This email is not verified" });
+                res.status(200).json({ "success": false, "reason": "This email is not verified" });
                 return;
             }
             NewAccounts.removeNewAccount(accountCreationID);
@@ -140,23 +140,23 @@ const createAccountUsernamePassword = (req, res) => {
             await client.connect()
                 .catch(() => {
                     console.log("DB connection failed in createAccountUsernamePassword()");
-                    res.status(200).json({ "success": "false", "reason": "A server error occured" });
+                    res.status(200).json({ "success": false, "reason": "A server error occured" });
                 });
             await client.db("playthosegames").collection("users").insertOne({
                 email: accountCreationDetails.email,
                 username: username,
                 password: password
             }).then(() => {
-                res.status(200).json({ "success": "true" });
+                res.status(200).json({ "success": true });
             }).catch(() => {
                 console.log("DB search failed in createAccountUsernamePassword()");
-                res.status(200).json({ "success": "false", "reason": "A server error occured" });
+                res.status(200).json({ "success": false, "reason": "A server error occured" });
             });
         }
     });
 }
 
 
-setInterval(() => { console.log("New Accounts:", NewAccounts.newAccounts) }, 5000);
+// setInterval(() => { console.log("New Accounts:", NewAccounts.newAccounts) }, 5000);
 
 module.exports = { createAccountSendEmail, createAccountVerifyEmail, createAccountUsernamePassword };

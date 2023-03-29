@@ -5,7 +5,6 @@ const app = express();
 const http = require("http").createServer(app);
 const PORT = process.env.PORT || 3000;
 
-const testRoutes = require("./routes/test.js");
 const usersRoutes = require("./routes/users.js");
 const socketIOHandler = require("./routes/ws.js").socketIOHandler;
 const prefix = "/api";
@@ -25,7 +24,6 @@ corsOptions = {
 
 app.use(cors(corsOptions));
 app.use(expressRateLimitor);
-app.use(prefix, testRoutes);
 app.use(prefix, usersRoutes);
 
 socketIOHandler(http, corsOptions);

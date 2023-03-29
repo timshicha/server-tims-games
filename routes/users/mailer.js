@@ -10,7 +10,7 @@ const transporter = nodemailer.createTransport({
     port: "465",
 });
 
-const sendEmail = (to, subject, text, htmlContent) => {
+const sendEmail = async (to, subject, text, htmlContent) => {
     var mailOptions = {
         from: "Play Those Games Support Team <support-team@playthosegames.com>",
         to: to,
@@ -20,14 +20,11 @@ const sendEmail = (to, subject, text, htmlContent) => {
     };
 
     let success = true;
-    return success;
 
-    transporter.sendMail(mailOptions, (error) => {
-        if (error) {
-            success = false;
-            console.log(error);
-        }
+    await transporter.sendMail(mailOptions).catch((err) => {
+        success = false;
     });
+    
     return success;
 };
 
