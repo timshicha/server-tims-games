@@ -49,12 +49,12 @@ const createAccountSendEmail = (req, res) => {
         await client.connect()
             .catch(() => {
                 console.log("DB connection failed in createAccountSendEmail()");
-                res.status(200).json({ "success": false, "reason": "A server error occured" });
+                res.status(200).json({ "success": false, "reason": "A server error occured." });
         });
         let user = await client.db("playthosegames").collection("users").findOne({ "email": email })
             .catch(() => {
                 console.log("DB search failed in createAccountSendEmail()");
-                res.status(200).json({ "success": false, "reason": "A server error occured" });
+                res.status(200).json({ "success": false, "reason": "A server error occured." });
 
         });
         if (user) {
@@ -62,9 +62,14 @@ const createAccountSendEmail = (req, res) => {
         }
         else {
             let code = Math.floor(Math.random() * 1000000);
+            // The code may have fewer than 6 digits, pad with 0's:
+            let codeAsString = code.toString();
+            while (codeAsString.length < 6) {
+                codeAsString = "0" + codeAsString;
+            }
             let accountCreationID = crypto.randomUUID();
             // If email send failed
-            let emailSuccess = await sendEmail(email, "Email Verification Code", "", confirmEmail(code));
+            let emailSuccess = await sendEmail(email, "Email Verification Code", "", confirmEmail(codeAsString));
             if (!emailSuccess) {
                 res.status(200).json({ "success": false, "reason": "Could not send verification code to this email." });
             }
@@ -112,6 +117,26 @@ const createAccountVerifyEmail = (req, res) => {
 }
 
 const createAccountUsernamePassword = (req, res) => {
+    // Check if a username is legal. A username may only have
+    // letters, numbers, and underscores and must be between 1
+    // and 25 characters.
+    const checkValidUsername = (username) => {
+        if (username.length === 0 || username.length > 25) {
+            return false;
+        }
+        let notAllowed = /[^a-zA-Z0-9_]/;
+        return !notAllowed.test(username);
+    }
+
+    // Check if a password is legal. A password must be between
+    // 8 and 50 characters.
+    const checkValidPassword = (password) => {
+        if (password.length < 8 || password.length > 50) {
+            return false;
+        }
+        return true;
+    }
+
     let body = "";
     req.on("data", chunk => {
         body += chunk.toString();
@@ -129,29 +154,45 @@ const createAccountUsernamePassword = (req, res) => {
         if (!accountCreationID || !username || !password || !(accountCreationDetails = NewAccounts.newAccounts[accountCreationID])) {
             res.status(200).json({ "success": false, "reason": "Could not create account." });
         }
+        // Should always pass since checks happened in the browser as well
+        else if (!checkValidUsername(username)) {
+            res.status(200).json({"success": false, "reason": "Invalid username. Username may have letters, numbers, and underscores, and must be between 1 and 25 characters."})
+        }
+        // Should always pass since checks happened in the browser as well
+        else if (!checkValidPassword(password)) {
+            res.status(200).json({ "success": false, "reason": "Invalid password. Password must be between 8 and 50 characters." });
+        }
         else {
             // If the email is not verified
             if (!accountCreationDetails.verified) {
-                res.status(200).json({ "success": false, "reason": "This email is not verified" });
+                res.status(200).json({ "success": false, "reason": "This email is not verified." });
                 return;
             }
-            NewAccounts.removeNewAccount(accountCreationID);
-
-            await client.connect()
-                .catch(() => {
-                    console.log("DB connection failed in createAccountUsernamePassword()");
-                    res.status(200).json({ "success": false, "reason": "A server error occured" });
-                });
-            await client.db("playthosegames").collection("users").insertOne({
-                email: accountCreationDetails.email,
-                username: username,
-                password: password
-            }).then(() => {
-                res.status(200).json({ "success": true });
+            
+            // Make sure a user doesn't already exist
+            let user = await client.db("playthosegames").collection("users").findOne({
+                username: username
             }).catch(() => {
-                console.log("DB search failed in createAccountUsernamePassword()");
-                res.status(200).json({ "success": false, "reason": "A server error occured" });
+                console.log("DB connection failed in createAccountUsernamePassword()");
+                res.status(200).json({ "success": false, "reason": "A server error occured." });
             });
+            
+            if (user) {
+                res.status(200).json({ "success": false, "reason": "This username is taken." });
+            }
+            else {
+                await client.db("playthosegames").collection("users").insertOne({
+                    email: accountCreationDetails.email,
+                    username: username,
+                    password: password
+                }).then(() => {
+                    NewAccounts.removeNewAccount(accountCreationID);
+                    res.status(200).json({ "success": true });
+                }).catch(() => {
+                    console.log("DB search failed in createAccountUsernamePassword()");
+                    res.status(200).json({ "success": false, "reason": "A server error occured." });
+                });
+            }
         }
     });
 }
