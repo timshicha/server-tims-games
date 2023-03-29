@@ -1,8 +1,14 @@
 const express = require("express");
 const router = express.Router();
+const rateLimiter = require("express-rate-limit");
 const { createAccountSendEmail, createAccountVerifyEmail, createAccountUsernamePassword } = require("./users/create-account.js");
 
-router.post('/users/create-account-send-email', (req, res) => {
+const expressRateLimitor = rateLimiter({
+    max: 3,
+    windowMS: 60000,
+});
+
+router.post('/users/create-account-send-email', expressRateLimitor, (req, res) => {
     createAccountSendEmail(req, res);
 });
 

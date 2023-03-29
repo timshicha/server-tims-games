@@ -43,7 +43,7 @@ const createAccountSendEmail = (req, res) => {
     });
     req.on("end", async () => {
         body = JSON.parse(body);
-        let email = body.email;
+        let email = body.email.toLowerCase();
 
         // Make sure this email doesn't exist in the database already
         await client.connect()
@@ -152,7 +152,7 @@ const createAccountUsernamePassword = (req, res) => {
 
         // Make sure all necessary data was send and accountCreationID exists
         if (!accountCreationID || !username || !password || !(accountCreationDetails = NewAccounts.newAccounts[accountCreationID])) {
-            res.status(200).json({ "success": false, "reason": "Could not create account." });
+            res.status(200).json({ "success": false, "reason": "Code expired before you made an account. Please try getting another code." });
         }
         // Should always pass since checks happened in the browser as well
         else if (!checkValidUsername(username)) {
@@ -171,8 +171,9 @@ const createAccountUsernamePassword = (req, res) => {
             
             // Make sure a user doesn't already exist
             let user = await client.db("playthosegames").collection("users").findOne({
-                username: username
-            }).catch(() => {
+                username: { "$regex": username, $options: "i" }
+            })
+            .catch(() => {
                 console.log("DB connection failed in createAccountUsernamePassword()");
                 res.status(200).json({ "success": false, "reason": "A server error occured." });
             });
