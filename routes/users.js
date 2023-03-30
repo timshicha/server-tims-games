@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const rateLimiter = require("express-rate-limit");
+const cookieParser = require("http-cookie-manager");
 const { createAccountSendEmail, createAccountVerifyEmail, createAccountUsernamePassword } = require("./users/create-account.js");
 
 const expressRateLimitor = rateLimiter({

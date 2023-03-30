@@ -43,7 +43,7 @@ const createAccountSendEmail = (req, res) => {
     });
     req.on("end", async () => {
         body = JSON.parse(body);
-        let email = body.email.toLowerCase();
+        let email = body.email.toString().toLowerCase();
 
         // Make sure this email doesn't exist in the database already
         await client.connect()
@@ -89,7 +89,7 @@ const createAccountVerifyEmail = (req, res) => {
     req.on("end", async () => {
         body = JSON.parse(body);
 
-        let accountCreationID = body.accountCreationID;
+        let accountCreationID = body.accountCreationID.toString();
         let code = parseInt(body.code);
 
         // Body variables must be present, and creation ID must exist
@@ -145,10 +145,10 @@ const createAccountUsernamePassword = (req, res) => {
         body = JSON.parse(body);
 
         // Add the user to the database
-        let accountCreationID = body.accountCreationID;
+        let accountCreationID = body.accountCreationID.toString();;
         let accountCreationDetails;
-        let username = body.username;
-        let password = body.password;
+        let username = body.username.toString();
+        let password = body.password.toString();
 
         // Make sure all necessary data was send and accountCreationID exists
         if (!accountCreationID || !username || !password || !(accountCreationDetails = NewAccounts.newAccounts[accountCreationID])) {
