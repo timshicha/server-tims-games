@@ -3,10 +3,10 @@ const router = express.Router();
 const { MongoClient } = require("mongodb");
 const crypto = require("crypto");
 const bcrypt = require("bcrypt");
+const { createSession } = require("../utilities/sessionTools");
 const client = new MongoClient(process.env.MONGO_URL);
 
 const validatePassword = async (password, hashedPassword) => {
-    console.log(password, hashedPassword);
     let result = await bcrypt.compare(password, hashedPassword);
     if (result === true) {
         return result;
@@ -28,10 +28,6 @@ router.post("/sessions/create", (req, res) => {
         let emailRegex = /@/
         let isEmail = emailRegex.test(username);
 
-        console.log("Username:", username);
-        console.log("Is email:", isEmail);
-        console.log("Password:", password);
-
         // If the user provided an email
         if (isEmail) {
             await client.connect().catch((err) => {
@@ -43,7 +39,6 @@ router.post("/sessions/create", (req, res) => {
             if (user) {
                 let hash = user.password;
                 if (await validatePassword(password, hash) === true) {
-                    console.log(user);
                     res.status(200).json({ success: true, username: user.username});
                 }
                 else {
@@ -65,6 +60,10 @@ router.post("/sessions/create", (req, res) => {
             if (user) {
                 let hash = user.password;
                 if (await validatePassword(password, hash) === true) {
+                    let sessionID = await createSession(user.userID);
+                    if (sessionID) {
+                        res.cookie("sessionID", sessionID);
+                    }
                     res.status(200).json({ success: true, username: user.email});
                 }
                 else {

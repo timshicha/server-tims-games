@@ -1,9 +1,19 @@
-const sendEmail = require("../mailer.js").sendEmail;
-const { MongoClient } = require("mongodb");
+const express = require("express");
+const router = express.Router();
+const sendEmail = require("../utilities/mailer.js").sendEmail;
 const crypto = require("crypto");
 const bcrypt = require("bcrypt");
+const rateLimiter = require("express-rate-limit");
+const { MongoClient } = require("mongodb");
 const client = new MongoClient(process.env.MONGO_URL);
 const VERIFY_EMAIL_ATTEMPTS = parseInt(process.env.VERIFY_EMAIL_ATTEMPTS);
+const { createSession } = require("../utilities/sessionTools");
+
+
+const expressRateLimitor = rateLimiter({
+    max: 3,
+    windowMS: 60000,
+});
 
 const confirmEmail = (code) => {
     return (
@@ -39,9 +49,7 @@ class NewAccounts {
     };
 };
 
-// Send a verification email to the user
-const createAccountSendEmail = (req, res) => {
-    // Read data
+router.post('/users/create-account-send-email', expressRateLimitor, (req, res) => {
     let body = "";
     req.on("data", chunk => {
         body += chunk.toString();
@@ -49,9 +57,6 @@ const createAccountSendEmail = (req, res) => {
     req.on("end", async () => {
         body = JSON.parse(body);
         let email = body.email.toString().toLowerCase();
-
-        let hash = (await bcrypt.hash(email, 10)).toString();
-        console.log(hash);
 
         // Make sure this email doesn't exist in the database already
         await client.connect()
@@ -87,9 +92,9 @@ const createAccountSendEmail = (req, res) => {
             }
         }
     });
-};
+});
 
-const createAccountVerifyEmail = (req, res) => {
+router.post('/users/create-account-verify-email', (req, res) => {
     let body = "";
     req.on("data", chunk => {
         body += chunk.toString();
@@ -122,9 +127,9 @@ const createAccountVerifyEmail = (req, res) => {
             }
         }
     });
-}
+});
 
-const createAccountUsernamePassword = (req, res) => {
+router.post('/users/create-account-username-password', (req, res) => {
     // Check if a username is legal. A username may only have
     // letters, numbers, and underscores and must be between 1
     // and 25 characters.
@@ -185,7 +190,6 @@ const createAccountUsernamePassword = (req, res) => {
                 console.log("DB connection failed in createAccountUsernamePassword()");
                 res.status(200).json({ "success": false, "reason": "A server error occured." });
             });
-            console.log(user);
             
             if (user) {
                 res.status(200).json({ "success": false, "reason": "This username is taken." });
@@ -193,13 +197,20 @@ const createAccountUsernamePassword = (req, res) => {
             else {
                 // Hash the password
                 let hash = await hashPassword(password);
-                console.log(hash);
+                // Create a uuid for the user
+                let userUUID = crypto.randomUUID();
                 await client.db("playthosegames").collection("users").insertOne({
+                    userID: userUUID,
                     email: accountCreationDetails.email,
                     username: username,
-                    password: hash
-                }).then(() => {
+                    password: hash,
+                }).then(async () => {
                     NewAccounts.removeNewAccount(accountCreationID);
+                    // Create a session
+                    let sessionID = await createSession(userUUID);
+                    if (sessionID) {
+                        res.cookie("sessionID", sessionID);
+                    }
                     res.status(200).json({ "success": true });
                 }).catch(() => {
                     console.log("DB search failed in createAccountUsernamePassword()");
@@ -208,9 +219,6 @@ const createAccountUsernamePassword = (req, res) => {
             }
         }
     });
-}
+});
 
-
-// setInterval(() => { console.log("New Accounts:", NewAccounts.newAccounts) }, 5000);
-
-module.exports = { createAccountSendEmail, createAccountVerifyEmail, createAccountUsernamePassword };
+module.exports = router;
