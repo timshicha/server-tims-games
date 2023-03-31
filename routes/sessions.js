@@ -1,8 +1,18 @@
 const express = require("express");
 const router = express.Router();
 const { MongoClient } = require("mongodb");
-const crypto  = require("crypto");
+const crypto = require("crypto");
+const bcrypt = require("bcrypt");
 const client = new MongoClient(process.env.MONGO_URL);
+
+const validatePassword = async (password, hashedPassword) => {
+    console.log(password, hashedPassword);
+    let result = await bcrypt.compare(password, hashedPassword);
+    if (result === true) {
+        return result;
+    }
+    return false;
+}
 
 // Read the provided username/email and passowrd and create session
 router.post("/sessions/create", (req, res) => {
@@ -29,13 +39,19 @@ router.post("/sessions/create", (req, res) => {
                 res.send(200).json({ "success": false, "reason": "Failed to connect to database." });
             });
             let user = await client.db("playthosegames").collection("users")
-                .findOne({ email: {"$regex": username, $options: "i" }, password: password });
+                .findOne({ email: {"$regex": new RegExp("^" + username + "$"), $options: "i" }});
             if (user) {
-                console.log(user);
-                res.status(200).json({ success: true, username: user.username});
+                let hash = user.password;
+                if (await validatePassword(password, hash) === true) {
+                    console.log(user);
+                    res.status(200).json({ success: true, username: user.username});
+                }
+                else {
+                    res.status(200).json({ success: false, reason: "The password is incorrect." });
+                }
             }
             else {
-                res.status(200).json({ success: false, reason: "No account found." });
+                res.status(200).json({ success: false, reason: "This email is not registered." });
             }
         }
         // If the user provided a username
@@ -45,13 +61,18 @@ router.post("/sessions/create", (req, res) => {
                 res.send(200).json({ "success": false, "reason": "Failed to connect to database." });
             });
             let user = await client.db("playthosegames").collection("users")
-                .findOne({ username: {"$regex": username, $options: "i" }, password: password });
+                .findOne({ username: {"$regex": new RegExp("^" + username + "$"), $options: "i" }});
             if (user) {
-                console.log(user);
-                res.status(200).json({ success: true, email: user.email});
+                let hash = user.password;
+                if (await validatePassword(password, hash) === true) {
+                    res.status(200).json({ success: true, username: user.email});
+                }
+                else {
+                    res.status(200).json({ success: false, reason: "The password is incorrect." });
+                }
             }
             else {
-                res.status(200).json({ success: false, reason: "No account found." });
+                res.status(200).json({ success: false, reason: "This username does not exist." });
             }
         }
     });

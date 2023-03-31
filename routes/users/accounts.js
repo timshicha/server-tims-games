@@ -1,6 +1,7 @@
-const sendEmail = require("./mailer.js").sendEmail;
+const sendEmail = require("../mailer.js").sendEmail;
 const { MongoClient } = require("mongodb");
-const crypto  = require("crypto");
+const crypto = require("crypto");
+const bcrypt = require("bcrypt");
 const client = new MongoClient(process.env.MONGO_URL);
 const VERIFY_EMAIL_ATTEMPTS = parseInt(process.env.VERIFY_EMAIL_ATTEMPTS);
 
@@ -9,6 +10,10 @@ const confirmEmail = (code) => {
         `<style>.text{font-family: Arial, Helvetica, sans-serif; } .space{letter-spacing: 4px; text-align: center; }</style><div style="width: fit-content; border: black solid 3px; padding: 10px;"><h2 class="text">Your email verification code is</h2><h2 class="text space"> ${code} </h2></div>`
     );
 };
+
+const hashPassword = async (password) => {
+    return await bcrypt.hash(password, 10);
+}
 
 // Class to manage new accounts (awaiting email verification)
 class NewAccounts {
@@ -45,13 +50,16 @@ const createAccountSendEmail = (req, res) => {
         body = JSON.parse(body);
         let email = body.email.toString().toLowerCase();
 
+        let hash = (await bcrypt.hash(email, 10)).toString();
+        console.log(hash);
+
         // Make sure this email doesn't exist in the database already
         await client.connect()
             .catch(() => {
                 console.log("DB connection failed in createAccountSendEmail()");
                 res.status(200).json({ "success": false, "reason": "A server error occured." });
         });
-        let user = await client.db("playthosegames").collection("users").findOne({ "email": email })
+        let user = await client.db("playthosegames").collection("users").findOne({ "email": {"$regex": new RegExp("^" + email + "$"), $options: "i"}})
             .catch(() => {
                 console.log("DB search failed in createAccountSendEmail()");
                 res.status(200).json({ "success": false, "reason": "A server error occured." });
@@ -171,21 +179,25 @@ const createAccountUsernamePassword = (req, res) => {
             
             // Make sure a user doesn't already exist
             let user = await client.db("playthosegames").collection("users").findOne({
-                username: { "$regex": username, $options: "i" }
+                username: { "$regex": new RegExp("^" + username + "$"), $options: "i" }
             })
             .catch(() => {
                 console.log("DB connection failed in createAccountUsernamePassword()");
                 res.status(200).json({ "success": false, "reason": "A server error occured." });
             });
+            console.log(user);
             
             if (user) {
                 res.status(200).json({ "success": false, "reason": "This username is taken." });
             }
             else {
+                // Hash the password
+                let hash = await hashPassword(password);
+                console.log(hash);
                 await client.db("playthosegames").collection("users").insertOne({
                     email: accountCreationDetails.email,
                     username: username,
-                    password: password
+                    password: hash
                 }).then(() => {
                     NewAccounts.removeNewAccount(accountCreationID);
                     res.status(200).json({ "success": true });
