@@ -39,6 +39,10 @@ router.post("/sessions/create", (req, res) => {
             if (user) {
                 let hash = user.password;
                 if (await validatePassword(password, hash) === true) {
+                    let sessionID = await createSession(user.userID);
+                    if (sessionID) {
+                        res.cookie("sessionID", sessionID);
+                    }
                     res.status(200).json({ success: true, username: user.username});
                 }
                 else {
