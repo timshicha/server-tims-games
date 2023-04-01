@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const { MongoClient } = require("mongodb");
 const bcrypt = require("bcrypt");
+const crypto = require("crypto");
 const { createSession, destroySession } = require("../utilities/sessionTools");
 const client = new MongoClient(process.env.MONGO_URL);
 const cookieParser = require("cookie-parser");
@@ -105,5 +106,57 @@ router.delete("/sessions/destroy", (req, res) => {
     });
 });
 
+class TempIDs {
+    static tempIDs = {};
 
-module.exports = router;
+    static createTempID = (username) => {
+        let tempID = crypto.randomUUID();
+        this.tempIDs[tempID] = username;
+
+        // Keep tempIDs short-lived. Delete them quickly
+        setTimeout(() => { this.destroyTempID(tempID) }, 30000);
+        return tempID;
+    }
+
+    static destroyTempID = (tempID) => {
+        delete this.tempIDs[tempID];
+    }
+
+    static getUsername = (tempID) => {
+        return this.tempIDs[tempID];
+    }
+};
+
+// Get a tempID
+router.get("/sessions/tempID", (req, res) => {
+    if (!req.cookies.sessionID) {
+        res.status(200).json({ success: false, reason: "You are not logged in." });
+        return;
+    }
+    let body = "";
+    req.on("data", chunk => {
+        body += chunk.toString();
+    });
+    req.on("end", async () => {
+        // If the sessionID cookie is valid, return a tempID pointing to their userID
+        await client.connect()
+            .then(async () => {
+                let session = await client.db("playthosegames").collection("sessions")
+                    .findOne({ sessionID: req.cookies.sessionID });
+                if (session) {
+                    let tempID = TempIDs.createTempID(session.username);
+                    res.status(200).json({ success: true, tempID: tempID });
+                }
+                else {
+                    res.status(200).json({ success: false, reason: "You are not logged in." });
+                }
+        })
+        .catch(err => {
+            console.log(err);
+            res.status(200).json({ success: false, reason: "Could not connect to database." });
+        });
+    });
+})
+
+
+module.exports = router, { TempIDs };

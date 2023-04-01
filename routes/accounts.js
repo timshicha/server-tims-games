@@ -53,7 +53,9 @@ class NewAccounts {
     // Remove all other accountCreation objects with same email
     static removeNewEmailAccounts = (email) => {
         for (const [key, value] of Object.entries(this.newAccounts)) {
-            delete this.newAccounts[key];
+            if (email === value) {
+                delete this.newAccounts[key];
+            }
         }
     }
 
