@@ -8,6 +8,7 @@ const { MongoClient } = require("mongodb");
 const client = new MongoClient(process.env.MONGO_URL);
 const VERIFY_EMAIL_ATTEMPTS = parseInt(process.env.VERIFY_EMAIL_ATTEMPTS);
 const { createSession } = require("../utilities/sessionTools");
+const LOGIN_SESSION_MAX_AGE = parseInt(process.env.LOGIN_SESSION_MAX_AGE);
 
 
 const expressRateLimitor = rateLimiter({
@@ -24,6 +25,22 @@ const confirmEmail = (code) => {
 const hashPassword = async (password) => {
     return await bcrypt.hash(password, 10);
 }
+
+// Set up database
+const setUpDatabase = async () => {
+    let connected = true;
+    await client.connect()
+        .catch((err) => {
+            console.log("Error connecting to DB when setting up");
+            connected = false;
+        });
+    if (!connected) {
+        return;
+    }
+    await client.db("playthosegames").collection("users").createIndex({ username: "hashed" });
+    await client.db("playthosegames").collection("sessions").createIndex({ sessionID: "hashed" });
+}
+setUpDatabase();
 
 // Class to manage new accounts (awaiting email verification)
 class NewAccounts {
@@ -59,11 +76,16 @@ router.post('/users/create-account-send-email', expressRateLimitor, (req, res) =
         let email = body.email.toString().toLowerCase();
 
         // Make sure this email doesn't exist in the database already
+        let connected = true;
         await client.connect()
             .catch(() => {
                 console.log("DB connection failed in createAccountSendEmail()");
+                connected = false;
                 res.status(200).json({ "success": false, "reason": "A server error occured." });
-        });
+            });
+        if (!connected) {
+            return;
+        }
         let user = await client.db("playthosegames").collection("users").findOne({ "email": {"$regex": new RegExp("^" + email + "$"), $options: "i"}})
             .catch(() => {
                 console.log("DB search failed in createAccountSendEmail()");
@@ -183,13 +205,18 @@ router.post('/users/create-account-username-password', (req, res) => {
             }
             
             // Make sure a user doesn't already exist
+            let connected = true;
             let user = await client.db("playthosegames").collection("users").findOne({
                 username: { "$regex": new RegExp("^" + username + "$"), $options: "i" }
             })
             .catch(() => {
                 console.log("DB connection failed in createAccountUsernamePassword()");
+                connected = false;
                 res.status(200).json({ "success": false, "reason": "A server error occured." });
             });
+            if (!connected) {
+                return;
+            }
             
             if (user) {
                 res.status(200).json({ "success": false, "reason": "This username is taken." });
@@ -200,16 +227,18 @@ router.post('/users/create-account-username-password', (req, res) => {
                 // Create a uuid for the user
                 let userUUID = crypto.randomUUID();
                 await client.db("playthosegames").collection("users").insertOne({
-                    userID: userUUID,
-                    email: accountCreationDetails.email,
                     username: username,
+                    email: accountCreationDetails.email,
                     password: hash,
+                    userID: userUUID,
                 }).then(async () => {
                     NewAccounts.removeNewAccount(accountCreationID);
                     // Create a session
-                    let sessionID = await createSession(userUUID);
+                    let sessionID = await createSession(username);
                     if (sessionID) {
-                        res.cookie("sessionID", sessionID);
+                        res.cookie("loggedIn", "true", { maxAge: LOGIN_SESSION_MAX_AGE });
+                        res.cookie("username", username, { maxAge: LOGIN_SESSION_MAX_AGE });
+                        res.cookie("sessionID", sessionID, {maxAge: LOGIN_SESSION_MAX_AGE});
                     }
                     res.status(200).json({ "success": true });
                 }).catch(() => {

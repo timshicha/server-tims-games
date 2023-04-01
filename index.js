@@ -8,12 +8,15 @@ const PORT = process.env.PORT || 3000;
 const accountsRoutes = require("./routes/accounts.js");
 const sessionRoutes = require("./routes/sessions.js");
 const socketIOHandler = require("./routes/serverSocket.js").socketIOHandler;
+const deleteExpiredSessions = require("./utilities/sessionTools.js").deleteExpiredSessions;
 const prefix = "/api";
 
 const expressRateLimitor = rateLimiter({
     max: 5,
     windowMS: 10000,
 });
+
+setInterval(deleteExpiredSessions, 30000);
 
 
 // Set up CORS to allow requests from our client

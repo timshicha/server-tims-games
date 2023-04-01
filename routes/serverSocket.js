@@ -14,6 +14,10 @@ const socketIOHandler = (http, corsOptions) => {
             console.log(data);
             console.log(socket.id);
         });
+
+        socket.on("disconnect", (data) => {
+            console.log("Disconnect");
+        })
     });
 }
 
