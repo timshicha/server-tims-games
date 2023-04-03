@@ -16,6 +16,7 @@ const expressRateLimitor = rateLimiter({
     windowMS: 10000,
 });
 
+// Delete expired sessions every 60 seconds
 setInterval(deleteExpiredSessions, 60 * 1000);
 
 

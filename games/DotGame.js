@@ -149,5 +149,16 @@ const move = (username, socket, x, y) => {
     game.move(username, x, y);
 }
 
+// Stop searching for a game
+const stop = (username) => {
+    // If they are waiting
+    if (waitlist[username]) {
+        delete waitlist[username];
+        return true;
+    }
+    // Otherwise, they are not waiting
+    return false;
+}
 
-module.exports = { startGame, move, BOARD_SIZE };
+
+module.exports = { startGame, stop, move, BOARD_SIZE };

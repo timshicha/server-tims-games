@@ -63,6 +63,22 @@ const socketIOHandler = (http, corsOptions) => {
 
         });
 
+        // Stop searching for a dot game
+        socket.on("dot-game-stop", (data) => {
+            console.log("dot-game-stop");
+            
+            // If they aren't in a game or are still searching, we can cancel
+            if (!socket.data.inDotGame || DotGame.stop(socket.data.username)) {
+                socket.data.inDotGame = false;
+                socket.emit("dot-game-stop", { success: true });
+                console.log("here");
+            }
+            else {
+                socket.emit("dot-game-stop", { success: false });
+                console.log("here2");
+            }
+        });
+
         socket.on("dot-game-move", (data) => {
             console.log("dot-game-move");
             // If no data
