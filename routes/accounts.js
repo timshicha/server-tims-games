@@ -4,8 +4,7 @@ const sendEmail = require("../utilities/mailer.js").sendEmail;
 const crypto = require("crypto");
 const bcrypt = require("bcrypt");
 const rateLimiter = require("express-rate-limit");
-const { MongoClient } = require("mongodb");
-const client = new MongoClient(process.env.MONGO_URL);
+const { client } = require("../db.js");
 const VERIFY_EMAIL_ATTEMPTS = parseInt(process.env.VERIFY_EMAIL_ATTEMPTS);
 const { createSession } = require("../utilities/sessionTools");
 const LOGIN_SESSION_MAX_AGE = parseInt(process.env.LOGIN_SESSION_MAX_AGE);
@@ -28,15 +27,6 @@ const hashPassword = async (password) => {
 
 // Set up database
 const setUpDatabase = async () => {
-    let connected = true;
-    await client.connect()
-        .catch((err) => {
-            console.log("Error connecting to DB when setting up");
-            connected = false;
-        });
-    if (!connected) {
-        return;
-    }
     await client.db("playthosegames").collection("users").createIndex({ username: "hashed" });
     await client.db("playthosegames").collection("sessions").createIndex({ sessionID: "hashed" });
 }
@@ -77,17 +67,6 @@ router.post('/users/create-account-send-email', expressRateLimitor, (req, res) =
         body = JSON.parse(body);
         let email = body.email.toString().toLowerCase();
 
-        // Make sure this email doesn't exist in the database already
-        let connected = true;
-        await client.connect()
-            .catch(() => {
-                console.log("DB connection failed in createAccountSendEmail()");
-                connected = false;
-                res.status(200).json({ "success": false, "reason": "A server error occured." });
-            });
-        if (!connected) {
-            return;
-        }
         let user = await client.db("playthosegames").collection("users").findOne({ "email": {"$regex": new RegExp("^" + email + "$"), $options: "i"}})
             .catch(() => {
                 console.log("DB search failed in createAccountSendEmail()");
@@ -207,18 +186,9 @@ router.post('/users/create-account-username-password', (req, res) => {
             }
             
             // Make sure a user doesn't already exist
-            let connected = true;
             let user = await client.db("playthosegames").collection("users").findOne({
                 username: { "$regex": new RegExp("^" + username + "$"), $options: "i" }
-            })
-            .catch(() => {
-                console.log("DB connection failed in createAccountUsernamePassword()");
-                connected = false;
-                res.status(200).json({ "success": false, "reason": "A server error occured." });
             });
-            if (!connected) {
-                return;
-            }
             
             if (user) {
                 res.status(200).json({ "success": false, "reason": "This username is taken." });

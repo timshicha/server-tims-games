@@ -5,14 +5,6 @@ const LOGIN_SESSION_MAX_AGE = parseInt(process.env.LOGIN_SESSION_MAX_AGE);
 
 
 const deleteExpiredSessions = async () => {
-    let connected = true;
-    await client.connect().catch((err) => {
-        connected = false;
-        console.log(err);
-    });
-    if (!connected) {
-        return;
-    }
     await client.db("playthosegames").collection("sessions")
         .deleteMany({expireAt: {$lte: (new Date()).getTime()}});
 }
@@ -21,14 +13,6 @@ const createSession = async (username) => {
     let sessionUUID = crypto.randomUUID();
     let toReturn = null;
 
-    let connected = true;
-    await client.connect().catch((err) => {
-        connected = false;
-        console.log(err);
-    });
-    if (!connected) {
-        return null;
-    }
     let expireAt = (new Date()).getTime() + LOGIN_SESSION_MAX_AGE;
     await client.db("playthosegames").collection("sessions")
         .insertOne({
@@ -46,14 +30,6 @@ const createSession = async (username) => {
 }
 
 const destroySession = async (sessionID) => {
-    let connected = true;
-    await client.connect().catch((err) => {
-        connected = false;
-        console.log(err);
-    });
-    if (!connected) {
-        return;
-    }
     await client.db("playthosegames").collection("sessions")
         .deleteOne({sessionID: sessionID});
 }

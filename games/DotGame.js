@@ -32,6 +32,7 @@ class DotGame {
         this.player2username = player2username;
         this.player2socket = player2socket;
         this.board = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(0));
+        this.turn = (Math.random() < 0.5 ? 1 : -1);
         player1socket.emit("dot-game-start", { success: true, opponent: player2username });
         player2socket.emit("dot-game-start", { success: true, opponent: player1username });
     }
@@ -49,16 +50,28 @@ class DotGame {
 
     // Make a move
     move = (username, x, y) => {
-        console.log("Inside DotGame.move");
         let player = this.p(username);
+        if (player !== this.turn) {
+            if (player === 1) {
+                this.player1socket.emit("dot-game-move", {
+                    success: false,
+                    reason: "It is not your turn to move."
+                });
+            }
+            else {
+                this.player2socket.emit("dot-game-move", {
+                    success: false,
+                    reason: "It is not your turn to move."
+                });
+            }
+            return;
+        }
         // If the spot is empty, move there
         if (this.board[x][y] === 0) {
             this.board[x][y] = player;
 
             // Fill in the matrix
             fillMatrix(this.board, player);
-
-            console.log("Board:", this.board);
 
             // If player 1 moved
             if (player === 1) {
@@ -94,6 +107,7 @@ class DotGame {
                     board: this.board
                 });
             }
+            this.turn *= -1;
         }
         // Otherwise, send error
         else {
@@ -108,16 +122,13 @@ class DotGame {
 }
 
 const startGame = (username, socket) => {
-    console.log("a");
     // If there's no one waiting for a game, add to waitlist
     if (Object.keys(waitlist).length === 0) {
         waitlist[username] = socket;
         return;
     }
-    console.log("b");
     // Otherwise pair them up
     let player2username = Object.keys(waitlist)[0];
-    console.log(player2username);
     let player2socket = waitlist[player2username];
     delete waitlist[player2username];
 
@@ -128,11 +139,11 @@ const startGame = (username, socket) => {
 }
 
 const move = (username, socket, x, y) => {
-    console.log("here");
     let game = players[username];
     // If the player tried to move while not in a game
     if (!game) {
         socket.emit("dot-game-move", { success: false, reason: "You are not in a game. Please start a game first." });
+        return;
     }
     // Otherwise, make the move on the game
     game.move(username, x, y);

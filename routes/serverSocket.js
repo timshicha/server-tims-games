@@ -1,7 +1,6 @@
 const socketIO = require("socket.io");
 const { getCookie } = require("../utilities/utilities");
-const { MongoClient } = require("mongodb");
-const client = new MongoClient(process.env.MONGO_URL);
+const { client } = require("../db");
 const DotGame = require("../games/DotGame");
 
 const socketIOHandler = (http, corsOptions) => {
@@ -14,36 +13,24 @@ const socketIOHandler = (http, corsOptions) => {
             socket.disconnect();
             return;
         }
-        
-        let forcedDisconnect = false;
-        
+                
         // Find the username
-        await client.connect().then(async () => {
-            let session = await client.db("playthosegames").collection("sessions")
+        let session = await client.db("playthosegames").collection("sessions")
             .findOne({ sessionID: sessionID });
-            if (session) {
-                socket.data.username = session.username;
-            }
-            else {
-                socket.disconnect();
-                forcedDisconnect = true;
-            }
-        }).catch(err => {
-            console.log(err);
-            forcedDisconnect = true;
-        });
-        if (forcedDisconnect) {
+        if (session) {
+            socket.data.username = session.username;
+        }
+        else {
+            socket.disconnect();
             return;
         }
 
+        console.log("[Socket] \u001b[32m" + socket.data.username + "\u001b[0m connected.");
         // Assign them to no games
         socket.data.inDotGame = false;
         
         socket.on("message", (data) => {
-            console.log("NEW MESSAGE");
-            console.log("Username:", socket.data.username);
-            console.log("Socket:", socket.id);
-            console.log("Message:", data);
+            console.log("[Socket] " + socket.data.username + ": " + data);
         });
 
         // Start a dot game
@@ -67,7 +54,6 @@ const socketIOHandler = (http, corsOptions) => {
 
             // If they want to join a random game
             if (!data.playWith) {
-                console.log("Play with a random opponent.");
                 DotGame.startGame(socket.data.username, socket);
             }
             // Otherwise if they want to play with someone
@@ -105,10 +91,8 @@ const socketIOHandler = (http, corsOptions) => {
         });
         
         socket.on("disconnect", () => {
-            console.log("Disconnect");
+            console.log("[Socket] \u001b[31m" + socket.data.username + "\u001b[0m disconnected.");
         });
-        
-        console.log("New client connected. SessionID:", sessionID);
     });
 }
 

@@ -12,11 +12,11 @@ const deleteExpiredSessions = require("./utilities/sessionTools.js").deleteExpir
 const prefix = "/api";
 
 const expressRateLimitor = rateLimiter({
-    max: 5,
+    max: 10,
     windowMS: 10000,
 });
 
-setInterval(deleteExpiredSessions, 30000);
+setInterval(deleteExpiredSessions, 60 * 1000);
 
 
 // Set up CORS to allow requests from our client

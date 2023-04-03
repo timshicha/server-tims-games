@@ -1,10 +1,9 @@
 const express = require("express");
 const router = express.Router();
-const { MongoClient } = require("mongodb");
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
 const { createSession, destroySession } = require("../utilities/sessionTools");
-const client = new MongoClient(process.env.MONGO_URL);
+const { client } = require("../db");
 const cookieParser = require("cookie-parser");
 const LOGIN_SESSION_MAX_AGE = parseInt(process.env.LOGIN_SESSION_MAX_AGE);
 
@@ -35,10 +34,6 @@ router.post("/sessions/create", (req, res) => {
 
         // If the user provided an email
         if (isEmail) {
-            await client.connect().catch((err) => {
-                console.log(err);
-                res.send(200).json({ "success": false, "reason": "Failed to connect to database." });
-            });
             let user = await client.db("playthosegames").collection("users")
                 .findOne({ email: {"$regex": new RegExp("^" + username + "$"), $options: "i" }});
             if (user) {
@@ -62,10 +57,6 @@ router.post("/sessions/create", (req, res) => {
         }
         // If the user provided a username
         else {
-            await client.connect().catch((err) => {
-                console.log(err);
-                res.send(200).json({ "success": false, "reason": "Failed to connect to database." });
-            });
             let user = await client.db("playthosegames").collection("users")
                 .findOne({ username: {"$regex": new RegExp("^" + username + "$"), $options: "i" }});
             if (user) {
@@ -139,22 +130,15 @@ router.get("/sessions/tempID", (req, res) => {
     });
     req.on("end", async () => {
         // If the sessionID cookie is valid, return a tempID pointing to their userID
-        await client.connect()
-            .then(async () => {
-                let session = await client.db("playthosegames").collection("sessions")
-                    .findOne({ sessionID: req.cookies.sessionID });
-                if (session) {
-                    let tempID = TempIDs.createTempID(session.username);
-                    res.status(200).json({ success: true, tempID: tempID });
-                }
-                else {
-                    res.status(200).json({ success: false, reason: "You are not logged in." });
-                }
-        })
-        .catch(err => {
-            console.log(err);
-            res.status(200).json({ success: false, reason: "Could not connect to database." });
-        });
+        let session = await client.db("playthosegames").collection("sessions")
+            .findOne({ sessionID: req.cookies.sessionID });
+        if (session) {
+            let tempID = TempIDs.createTempID(session.username);
+            res.status(200).json({ success: true, tempID: tempID });
+        }
+        else {
+            res.status(200).json({ success: false, reason: "You are not logged in." });
+        }
     });
 })
 
