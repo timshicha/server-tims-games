@@ -2,6 +2,12 @@ const crypto = require("crypto");
 const { fillMatrix, calculateArea } = require("./dotGamesAlgs");
 
 const BOARD_SIZE = 19;
+const MAX_AREA = (BOARD_SIZE - 1) * (BOARD_SIZE - 1);
+const AREA_DIFFERENCE_WIN = 10;
+const AREA_PERCENTAGE_WIN = 10;
+const MISSED_TURNS_WIN = 4;
+// How many seconds per move
+const MAX_TIME_TO_MOVE = 5;
 
 
 // List of usernames and their games
@@ -33,8 +39,22 @@ class DotGame {
         this.player2socket = player2socket;
         this.board = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(0));
         this.turn = (Math.random() < 0.5 ? 1 : -1);
+        this.player1area = 0;
+        this.player2area = 0;
+        // Percents are actual percents (0.00-100.00, not 0.00-1.00)
+        this.player1areaPercent = 0.00;
+        this.player2areaPercent = 0.00;
+        // Keep a counter of how many turns were missed in a row.
+        // 4 missed turns in a row represents a loss
+        this.missedTurns = 0;
         player1socket.emit("dot-game-start", { success: true, opponent: player2username });
         player2socket.emit("dot-game-start", { success: true, opponent: player1username });
+        if (this.turn === 1) {
+            player1socket.emit("dot-game-move");
+        }
+        else {
+            player2socket.emit("dot-game-move");
+        }
     }
 
     // Get the player's value based on username
@@ -49,21 +69,9 @@ class DotGame {
     }
 
     // Make a move
-    move = (username, x, y) => {
+    move = async (username, x, y) => {
         let player = this.p(username);
         if (player !== this.turn) {
-            if (player === 1) {
-                this.player1socket.emit("dot-game-move", {
-                    success: false,
-                    reason: "It is not your turn to move."
-                });
-            }
-            else {
-                this.player2socket.emit("dot-game-move", {
-                    success: false,
-                    reason: "It is not your turn to move."
-                });
-            }
             return;
         }
         // If the spot is empty, move there
@@ -74,58 +82,160 @@ class DotGame {
             // Fill in the matrix
             fillMatrix(this.board, player);
             // Calculate how much each player controls
-            let player1area = calculateArea(this.board, 1);
-            let player2area = calculateArea(this.board, -1);
+            this.player1area = calculateArea(this.board, 1);
+            this.player2area = calculateArea(this.board, -1);
+            this.player1areaPercent = (this.player1area / MAX_AREA * 100).toFixed(2);
+            this.player2areaPercent = (this.player2area / MAX_AREA * 100).toFixed(2);
+
+            // Check for wins (and finalize game if it's over)
+            let gameEnded = await this.checkWin();
 
             // If player 1 moved
             if (player === 1) {
-                this.player1socket.emit("dot-game-move", {
+                this.player1socket.emit("dot-game-update", {
                     success: true,
                     player: "you",
                     x: x,
                     y: y,
                     board: this.board,
-                    area: {you: player1area, opponent: player2area}
+                    area: { you: this.player1area, opponent: this.player2area },
+                    areaPercent: {you: this.player1areaPercent, opponent: this.player2areaPercent}
                 });
-                this.player2socket.emit("dot-game-move", {
+                this.player2socket.emit("dot-game-update", {
                     success: true,
                     player: "opponent",
                     x: x,
                     y: y,
                     board: this.board,
-                    area: {you: player2area, opponent: player1area}
+                    area: { you: this.player2area, opponent: this.player1area },
+                    areaPercent: {you: this.player2areaPercent, opponent: this.player1areaPercent}
                 });
             }
             // If player 2 moved
             else {
-                this.player1socket.emit("dot-game-move", {
+                this.player1socket.emit("dot-game-update", {
                     success: true,
                     player: "opponent",
                     x: x,
                     y: y,
                     board: this.board,
-                    area: {you: player1area, opponent: player2area}
+                    area: { you: this.player1area, opponent: this.player2area },
+                    areaPercent: {you: this.player1areaPercent, opponent: this.player2areaPercent}
+
                 });
-                this.player2socket.emit("dot-game-move", {
+                this.player2socket.emit("dot-game-update", {
                     success: true,
                     player: "you",
                     x: x,
                     y: y,
                     board: this.board,
-                    area: {you: player2area, opponent: player1area}
+                    area: { you: this.player2area, opponent: this.player1area },
+                    areaPercent: {you: this.player2areaPercent, opponent: this.player1areaPercent}
                 });
             }
             this.turn *= -1;
-        }
-        // Otherwise, send error
-        else {
-            if (player === 1) {
-                this.player1socket.emit("dot-game-move", { success: false });
+            if (!gameEnded) {
+                if (this.turn === 1) {
+                    this.player1socket.emit("dot-game-move");
+                }
+                else {
+                    this.player2socket.emit("dot-game-move");
+                }
             }
-            else {
-                this.player2socket.emit("dot-game-move", { success: false });
-            }
+            this.missedTurns = 0;
         }
+    }
+
+    // Add the results to the database
+    recordResult = async (winnerUsername, loserUsername) => {
+        // Add here
+        // Remove this game from the list
+        delete players[this.player1username];
+        delete players[this.player2username];
+        // Reset the player's status to not in a game
+        this.player1socket.data.inDotGame = false;
+        this.player2socket.data.inDotGame = false;
+    }
+
+    checkWin = async () => {
+        // Area difference wins
+        if (this.player1area >= this.player2area + AREA_DIFFERENCE_WIN) {
+            this.player1socket.emit("dot-game-over", {
+                winner: "you",
+                reason: "You win by area difference."
+            });
+            this.player2socket.emit("dot-game-over", {
+                winner: "opponent",
+                reason: "Opponent wins by area difference."
+            });
+            await this.recordResult(this.player1username, this.player2username);
+            return true;
+        }
+        else if (this.player2area >= this.player1area + AREA_DIFFERENCE_WIN) {
+            this.player1socket.emit("dot-game-over", {
+                winner: "opponent",
+                reason: "Opponent wins by area difference."
+            });
+            this.player2socket.emit("dot-game-over", {
+                winner: "you",
+                reason: "You win by area difference."
+            });
+            await this.recordResult(this.player2username, this.player1username);
+            return true;
+        }
+        // Area percentage wins
+        else if (this.player1areaPercent >= AREA_PERCENTAGE_WIN) {
+            this.player1socket.emit("dot-game-over", {
+                winner: "you",
+                reason: "You win by area percentage."
+            });
+            this.player2socket.emit("dot-game-over", {
+                winner: "opponent",
+                reason: "Opponent wins by area percentage."
+            });
+            await this.recordResult(this.player1username, this.player2username);
+            return true;
+        }
+        else if (this.player2areaPercent >= AREA_PERCENTAGE_WIN) {
+            this.player1socket.emit("dot-game-over", {
+                winner: "opponent",
+                reason: "Opponent wins by area percentage."
+            });
+            this.player2socket.emit("dot-game-over", {
+                winner: "you",
+                reason: "You win by area percentage."
+            });
+            await this.recordResult(this.player2username, this.player1username);
+            return true;
+        }
+        // Check for wins by inactivity
+        if (this.missedTurns >= MISSED_TURNS_WIN) {
+            // Player 1 missed their turns
+            if (this.turn === 1) {
+                this.player1socket.emit("dot-game-over", {
+                    winner: "opponent",
+                    reason: "Opponent wins because you missed 4 consecutive turns."
+                });
+                this.player2socket.emit("dot-game-over", {
+                    winner: "you",
+                    reason: "You win because your opponent missed 4 consecutive turns."
+                });
+                await this.recordResult(this.player2username, this.player1username);
+            }
+            else if (this.turn === -1) {
+                this.player1socket.emit("dot-game-over", {
+                    winner: "you",
+                    reason: "You win because your opponent missed 4 consecutive turns."
+                });
+                this.player2socket.emit("dot-game-over", {
+                    winner: "opponent",
+                    reason: "Opponent wins because you missed 4 consecutive turns."
+                });
+                await this.recordResult(this.player1username, this.player2username);
+            }
+            return true;
+        }
+        return false;
     }
 }
 
@@ -150,7 +260,6 @@ const move = (username, socket, x, y) => {
     let game = players[username];
     // If the player tried to move while not in a game
     if (!game) {
-        socket.emit("dot-game-move", { success: false, reason: "You are not in a game. Please start a game first." });
         return;
     }
     // Otherwise, make the move on the game

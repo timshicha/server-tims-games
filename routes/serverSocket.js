@@ -10,6 +10,9 @@ const socketIOHandler = (http, corsOptions) => {
         let sessionID = getCookie(socket.handshake.headers.cookie, "sessionID");
         // If no session ID provided, disconnect
         if (!sessionID) {
+            socket.emit("pre-disconnect", {
+                reason: "You are not signed in."
+            });
             socket.disconnect();
             return;
         }
@@ -21,6 +24,9 @@ const socketIOHandler = (http, corsOptions) => {
             socket.data.username = session.username;
         }
         else {
+            socket.emit("pre-disconnect", {
+                reason: "You are not signed in."
+            });
             socket.disconnect();
             return;
         }
@@ -85,18 +91,12 @@ const socketIOHandler = (http, corsOptions) => {
             }
             // If they are not in a dot game
             if (!socket.data.inDotGame) {
-                socket.emit("dot-game-move", {
-                    success: false,
-                    reason: "You are not in a game."
-                });
                 return;
             }
             // Make sure they provided valid coordinates
             let x = parseInt(data.x);
             let y = parseInt(data.y);
-            console.log(x, y);
             if (isNaN(x) || isNaN(y)) {
-                console.log("here");
                 return;
             }
             if (x < 0 || x >= DotGame.BOARD_SIZE || y < 0 || y >= DotGame.BOARD_SIZE) {
