@@ -1,5 +1,5 @@
 const crypto = require("crypto");
-const { fillMatrix } = require("./dotGamesAlgs");
+const { fillMatrix, calculateArea } = require("./dotGamesAlgs");
 
 const BOARD_SIZE = 19;
 
@@ -67,11 +67,15 @@ class DotGame {
             return;
         }
         // If the spot is empty, move there
+        console.log(x, y);
         if (this.board[x][y] === 0) {
             this.board[x][y] = player;
 
             // Fill in the matrix
             fillMatrix(this.board, player);
+            // Calculate how much each player controls
+            let player1area = calculateArea(this.board, 1);
+            let player2area = calculateArea(this.board, -1);
 
             // If player 1 moved
             if (player === 1) {
@@ -80,14 +84,16 @@ class DotGame {
                     player: "you",
                     x: x,
                     y: y,
-                    board: this.board
+                    board: this.board,
+                    area: {you: player1area, opponent: player2area}
                 });
                 this.player2socket.emit("dot-game-move", {
                     success: true,
                     player: "opponent",
                     x: x,
                     y: y,
-                    board: this.board
+                    board: this.board,
+                    area: {you: player2area, opponent: player1area}
                 });
             }
             // If player 2 moved
@@ -97,14 +103,16 @@ class DotGame {
                     player: "opponent",
                     x: x,
                     y: y,
-                    board: this.board
+                    board: this.board,
+                    area: {you: player1area, opponent: player2area}
                 });
                 this.player2socket.emit("dot-game-move", {
                     success: true,
                     player: "you",
                     x: x,
                     y: y,
-                    board: this.board
+                    board: this.board,
+                    area: {you: player2area, opponent: player1area}
                 });
             }
             this.turn *= -1;

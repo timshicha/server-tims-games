@@ -36,7 +36,7 @@ const socketIOHandler = (http, corsOptions) => {
         // Start a dot game
         socket.on("dot-game-start", (data) => {
 
-            console.log("dot-game-start");
+            // console.log("dot-game-start");
             if (!data) {
                 return;
             }
@@ -65,22 +65,20 @@ const socketIOHandler = (http, corsOptions) => {
 
         // Stop searching for a dot game
         socket.on("dot-game-stop", (data) => {
-            console.log("dot-game-stop");
+            // console.log("dot-game-stop");
             
             // If they aren't in a game or are still searching, we can cancel
             if (!socket.data.inDotGame || DotGame.stop(socket.data.username)) {
                 socket.data.inDotGame = false;
                 socket.emit("dot-game-stop", { success: true });
-                console.log("here");
             }
             else {
                 socket.emit("dot-game-stop", { success: false });
-                console.log("here2");
             }
         });
 
         socket.on("dot-game-move", (data) => {
-            console.log("dot-game-move");
+            // console.log("dot-game-move");
             // If no data
             if (!data) {
                 return;
@@ -96,7 +94,9 @@ const socketIOHandler = (http, corsOptions) => {
             // Make sure they provided valid coordinates
             let x = parseInt(data.x);
             let y = parseInt(data.y);
-            if (x === NaN || y === NaN) {
+            console.log(x, y);
+            if (isNaN(x) || isNaN(y)) {
+                console.log("here");
                 return;
             }
             if (x < 0 || x >= DotGame.BOARD_SIZE || y < 0 || y >= DotGame.BOARD_SIZE) {

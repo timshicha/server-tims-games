@@ -1,4 +1,5 @@
 
+// Given a player's points, fills the inside of the closed shapes
 const fillMatrix = (matrix, player) => {
     // v = visited
     const BOARD_SIZE = matrix.length;
@@ -49,4 +50,49 @@ const fillMatrix = (matrix, player) => {
     }
 }
 
-module.exports = { fillMatrix };
+// Calculate the area a player holds
+const calculateArea = (matrix, player) => {
+    // Give the four corners of the sqare to determine how much of it the
+    // player controls (0, 0.5, or 1)
+    const calculateSquare = (topLeft, topRight, bottomRight, bottomLeft) => {
+        let total = 0;
+        // Add one corner for each corner the player controls
+        if (topLeft === player) {
+            total += 1;
+        }
+        if (topRight === player) {
+            total += 1;
+        }
+        if (bottomRight === player) {
+            total += 1;
+        }
+        if (bottomLeft === player) {
+            total += 1;
+        }
+        // Determine how much of the square they control based on the
+        // corners they control
+        if (total === 4) {
+            return 1;
+        }
+        if (total === 3) {
+            return 0.5;
+        }
+        return 0;
+    }
+
+    let size = matrix.length;
+    let total = 0;
+    for (let i = 0; i < size - 1; i++) {
+        for (let j = 0; j < size - 1; j++) {
+            total += calculateSquare(
+                matrix[i][j],
+                matrix[i][j + 1],
+                matrix[i + 1][j + 1],
+                matrix[i + 1][j]
+            );
+        }
+    }
+    return total;
+}
+
+module.exports = { fillMatrix, calculateArea };
