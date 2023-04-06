@@ -1,10 +1,10 @@
 const crypto = require("crypto");
 const { fillMatrix, calculateArea } = require("./dotGamesAlgs");
 
-const BOARD_SIZE = 19;
+const BOARD_SIZE = 18 - 1;
 const MAX_AREA = (BOARD_SIZE - 1) * (BOARD_SIZE - 1);
-const AREA_DIFFERENCE_WIN = 10;
-const AREA_PERCENTAGE_WIN = 10;
+const AREA_DIFFERENCE_WIN = 20;
+const AREA_PERCENTAGE_WIN = 25;
 const MISSED_TURNS_WIN = 4;
 // How many seconds per move
 const MAX_TIME_TO_MOVE = 5;
