@@ -45,6 +45,8 @@ class DotGame {
         this.player1areaPercent = 0.00;
         this.player2areaPercent = 0.00;
         this.timeoutID = null;
+        // The time in milliseconds when the turn expires
+        this.timeoutTime = null;
         this.forfeit = null;
         // Keep a counter of how many turns were missed in a row.
         // 4 missed turns in a row represents a loss
@@ -91,13 +93,17 @@ class DotGame {
     }
 
     sendTurn = () => {
+        let timeoutTime = (new Date()).getTime() + MAX_TIME_TO_MOVE + 2000;
         if (this.turn === 1) {
-            this.player1socket.emit("dot-game-move");
+            this.player1socket.emit("dot-game-move", { moveBy: timeoutTime });
+            this.player2socket.emit("dot-game-opponent-move", {moveBy: timeoutTime});
         }
         else {
-            this.player2socket.emit("dot-game-move");
+            this.player1socket.emit("dot-game-opponent-move", {moveBy: timeoutTime});
+            this.player2socket.emit("dot-game-move", {moveBy: timeoutTime});
         }
-        this.timeoutID = setTimeout(this.expireTurn, MAX_TIME_TO_MOVE + 1000);
+        this.timeoutTime = timeoutTime;
+        this.timeoutID = setTimeout(this.expireTurn, MAX_TIME_TO_MOVE + 2000);
     }
 
     // Make a move
@@ -122,7 +128,7 @@ class DotGame {
 
             // If player 1 moved
             if (player === 1) {
-                this.player2missedTurns = 0;
+                this.player1missedTurns = 0;
                 this.player1socket.emit("dot-game-update", {
                     success: true,
                     player: "you",
@@ -351,7 +357,6 @@ const forfeit = (username) => {
     if (!game) {
         return;
     }
-    console.log(game);
     game.forfeitGame(username);
 }
 

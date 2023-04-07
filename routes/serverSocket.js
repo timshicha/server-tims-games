@@ -84,7 +84,7 @@ const socketIOHandler = (http, corsOptions) => {
         });
 
         socket.on("dot-game-move", (data) => {
-            // console.log("dot-game-move");
+            console.log("dot-game-move");
             // If no data
             if (!data) {
                 return;
