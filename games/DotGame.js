@@ -47,8 +47,8 @@ class DotGame {
         // Keep a counter of how many turns were missed in a row.
         // 4 missed turns in a row represents a loss
         this.missedTurns = 0;
-        player1socket.emit("dot-game-start", { success: true, opponent: player2username });
-        player2socket.emit("dot-game-start", { success: true, opponent: player1username });
+        player1socket.emit("dot-game-start", { success: true, opponent: player2username, you: 1});
+        player2socket.emit("dot-game-start", { success: true, opponent: player1username, you: -1 });
         if (this.turn === 1) {
             player1socket.emit("dot-game-move");
         }
