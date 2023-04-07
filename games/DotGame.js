@@ -6,8 +6,8 @@ const MAX_AREA = (BOARD_SIZE - 1) * (BOARD_SIZE - 1);
 const AREA_DIFFERENCE_WIN = 20;
 const AREA_PERCENTAGE_WIN = 25;
 const MISSED_TURNS_WIN = 4;
-// How many seconds per move
-const MAX_TIME_TO_MOVE = 5;
+// How many milliseconds seconds per move
+const MAX_TIME_TO_MOVE = 5000;
 
 
 // List of usernames and their games
@@ -44,17 +44,17 @@ class DotGame {
         // Percents are actual percents (0.00-100.00, not 0.00-1.00)
         this.player1areaPercent = 0.00;
         this.player2areaPercent = 0.00;
+        this.timeoutID = null;
+        this.forfeit = null;
         // Keep a counter of how many turns were missed in a row.
         // 4 missed turns in a row represents a loss
-        this.missedTurns = 0;
+        this.player1missedTurns = 0;
+        this.player2missedTurns = 0;
         player1socket.emit("dot-game-start", { success: true, opponent: player2username, you: 1});
         player2socket.emit("dot-game-start", { success: true, opponent: player1username, you: -1 });
-        if (this.turn === 1) {
-            player1socket.emit("dot-game-move");
-        }
-        else {
-            player2socket.emit("dot-game-move");
-        }
+        
+        this.sendTurn();
+        console.log("[Dot Game] New game: " + player1username + " vs " + player2username);
     }
 
     // Get the player's value based on username
@@ -68,6 +68,38 @@ class DotGame {
         }
     }
 
+    // Called after a user hasn't moved for longer than the allowed time
+    expireTurn = async () => {
+        console.log("Someone didn't move");
+        let gameFinished = false;
+        if (this.turn === 1) {
+            this.player1missedTurns += 1;
+            if (this.player1missedTurns >= MISSED_TURNS_WIN) {
+                gameFinished = await this.checkWin();
+            }
+        }
+        else {
+            this.player2missedTurns += 1;
+            if (this.player2missedTurns >= MISSED_TURNS_WIN) {
+                gameFinished = await this.checkWin();
+            }
+        }
+        this.turn *= -1;
+        if (!gameFinished) {
+            this.sendTurn();
+        }
+    }
+
+    sendTurn = () => {
+        if (this.turn === 1) {
+            this.player1socket.emit("dot-game-move");
+        }
+        else {
+            this.player2socket.emit("dot-game-move");
+        }
+        this.timeoutID = setTimeout(this.expireTurn, MAX_TIME_TO_MOVE + 1000);
+    }
+
     // Make a move
     move = async (username, x, y) => {
         let player = this.p(username);
@@ -75,9 +107,10 @@ class DotGame {
             return;
         }
         // If the spot is empty, move there
-        console.log(x, y);
         if (this.board[x][y] === 0) {
             this.board[x][y] = player;
+
+            clearTimeout(this.timeoutID);
 
             // Fill in the matrix
             fillMatrix(this.board, player);
@@ -87,11 +120,9 @@ class DotGame {
             this.player1areaPercent = (this.player1area / MAX_AREA * 100).toFixed(2);
             this.player2areaPercent = (this.player2area / MAX_AREA * 100).toFixed(2);
 
-            // Check for wins (and finalize game if it's over)
-            let gameEnded = await this.checkWin();
-
             // If player 1 moved
             if (player === 1) {
+                this.player2missedTurns = 0;
                 this.player1socket.emit("dot-game-update", {
                     success: true,
                     player: "you",
@@ -113,6 +144,7 @@ class DotGame {
             }
             // If player 2 moved
             else {
+                this.player2missedTurns = 0;
                 this.player1socket.emit("dot-game-update", {
                     success: true,
                     player: "opponent",
@@ -133,17 +165,20 @@ class DotGame {
                     areaPercent: {you: this.player2areaPercent, opponent: this.player1areaPercent}
                 });
             }
-            this.turn *= -1;
-            if (!gameEnded) {
-                if (this.turn === 1) {
-                    this.player1socket.emit("dot-game-move");
-                }
-                else {
-                    this.player2socket.emit("dot-game-move");
-                }
+
+            // Check for wins
+            if (await this.checkWin()) {
+                return;
             }
-            this.missedTurns = 0;
+
+            this.turn *= -1;
+            this.sendTurn();
         }
+    }
+
+    forfeitGame = (player) => {
+        this.forfeit = player;
+        this.checkWin();
     }
 
     // Add the results to the database
@@ -169,6 +204,7 @@ class DotGame {
                 reason: "Opponent wins by area difference."
             });
             await this.recordResult(this.player1username, this.player2username);
+            clearTimeout(this.timeoutID);
             return true;
         }
         else if (this.player2area >= this.player1area + AREA_DIFFERENCE_WIN) {
@@ -181,6 +217,7 @@ class DotGame {
                 reason: "You win by area difference."
             });
             await this.recordResult(this.player2username, this.player1username);
+            clearTimeout(this.timeoutID);
             return true;
         }
         // Area percentage wins
@@ -194,6 +231,7 @@ class DotGame {
                 reason: "Opponent wins by area percentage."
             });
             await this.recordResult(this.player1username, this.player2username);
+            clearTimeout(this.timeoutID);
             return true;
         }
         else if (this.player2areaPercent >= AREA_PERCENTAGE_WIN) {
@@ -206,34 +244,64 @@ class DotGame {
                 reason: "You win by area percentage."
             });
             await this.recordResult(this.player2username, this.player1username);
+            clearTimeout(this.timeoutID);
             return true;
         }
         // Check for wins by inactivity
-        if (this.missedTurns >= MISSED_TURNS_WIN) {
-            // Player 1 missed their turns
-            if (this.turn === 1) {
+        else if (this.player1missedTurns >= MISSED_TURNS_WIN) {
+            this.player1socket.emit("dot-game-over", {
+                winner: "opponent",
+                reason: "Opponent wins because you missed " + MISSED_TURNS_WIN + " consecutive turns."
+            });
+            this.player2socket.emit("dot-game-over", {
+                winner: "you",
+                reason: "You win because your opponent missed " + MISSED_TURNS_WIN + " consecutive turns."
+            });
+            await this.recordResult(this.player2username, this.player1username);
+            clearTimeout(this.timeoutID);
+            return true;
+        }
+        else if (this.player2missedTurns >= MISSED_TURNS_WIN) {
+            this.player1socket.emit("dot-game-over", {
+                winner: "you",
+                reason: "You win because your opponent missed " + MISSED_TURNS_WIN + " consecutive turns."
+            });
+            this.player2socket.emit("dot-game-over", {
+                winner: "opponent",
+                reason: "Opponent wins because you missed " + MISSED_TURNS_WIN + " consecutive turns."
+            });
+            await this.recordResult(this.player1username, this.player2username);
+            clearTimeout(this.timeoutID);
+            return true;
+        }
+        // Check for forfeit
+        else if (this.forfeit) {
+            if (this.forfeit === this.player1username) {
                 this.player1socket.emit("dot-game-over", {
                     winner: "opponent",
-                    reason: "Opponent wins because you missed 4 consecutive turns."
+                    reason: "Opponent wins because you foreited."
                 });
                 this.player2socket.emit("dot-game-over", {
                     winner: "you",
-                    reason: "You win because your opponent missed 4 consecutive turns."
+                    reason: "You win because your opponent forfeited."
                 });
                 await this.recordResult(this.player2username, this.player1username);
+                clearTimeout(this.timeoutID);
+                return true;
             }
-            else if (this.turn === -1) {
+            else if (this.forfeit === this.player2username) {
                 this.player1socket.emit("dot-game-over", {
                     winner: "you",
-                    reason: "You win because your opponent missed 4 consecutive turns."
+                    reason: "You win because your opponent forfeited."
                 });
                 this.player2socket.emit("dot-game-over", {
                     winner: "opponent",
-                    reason: "Opponent wins because you missed 4 consecutive turns."
+                    reason: "Opponent wins because you foreited."
                 });
                 await this.recordResult(this.player1username, this.player2username);
+                clearTimeout(this.timeoutID);
+                return true;
             }
-            return true;
         }
         return false;
     }
@@ -277,5 +345,15 @@ const stop = (username) => {
     return false;
 }
 
+const forfeit = (username) => {
+    let game = players[username];
+    // If the player tried to forfeit while not in a game
+    if (!game) {
+        return;
+    }
+    console.log(game);
+    game.forfeitGame(username);
+}
 
-module.exports = { startGame, stop, move, BOARD_SIZE };
+
+module.exports = { startGame, stop, move, forfeit, BOARD_SIZE };

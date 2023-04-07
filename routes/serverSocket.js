@@ -105,8 +105,17 @@ const socketIOHandler = (http, corsOptions) => {
             // Otherwise, make the move
             DotGame.move(socket.data.username, socket, x, y);
         });
+
+        socket.on("dot-game-forfeit", () => {
+            if (!socket.data.inDotGame) {
+                return;
+            }
+            DotGame.forfeit(socket.data.username);
+        });
         
         socket.on("disconnect", () => {
+            // Stop any game searches they're making
+            DotGame.stop(socket.data.username);
             console.log("[Socket] \u001b[31m" + socket.data.username + "\u001b[0m disconnected.");
         });
     });
