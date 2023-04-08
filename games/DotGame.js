@@ -4,7 +4,7 @@ const { fillMatrix, calculateArea } = require("./dotGamesAlgs");
 const BOARD_SIZE = 18 - 1;
 const MAX_AREA = (BOARD_SIZE - 1) * (BOARD_SIZE - 1);
 const AREA_DIFFERENCE_WIN = 20;
-const AREA_PERCENTAGE_WIN = 25;
+// const AREA_PERCENTAGE_WIN = 25;
 const MISSED_TURNS_WIN = 4;
 // How many milliseconds seconds per move
 const MAX_TIME_TO_MOVE = 5000;
@@ -41,9 +41,6 @@ class DotGame {
         this.turn = (Math.random() < 0.5 ? 1 : -1);
         this.player1area = 0;
         this.player2area = 0;
-        // Percents are actual percents (0.00-100.00, not 0.00-1.00)
-        this.player1areaPercent = 0.00;
-        this.player2areaPercent = 0.00;
         this.timeoutID = null;
         // The time in milliseconds when the turn expires
         this.timeoutTime = null;
@@ -123,8 +120,6 @@ class DotGame {
             // Calculate how much each player controls
             this.player1area = calculateArea(this.board, 1);
             this.player2area = calculateArea(this.board, -1);
-            this.player1areaPercent = (this.player1area / MAX_AREA * 100).toFixed(2);
-            this.player2areaPercent = (this.player2area / MAX_AREA * 100).toFixed(2);
 
             // If player 1 moved
             if (player === 1) {
@@ -136,7 +131,6 @@ class DotGame {
                     y: y,
                     board: this.board,
                     area: { you: this.player1area, opponent: this.player2area },
-                    areaPercent: {you: this.player1areaPercent, opponent: this.player2areaPercent}
                 });
                 this.player2socket.emit("dot-game-update", {
                     success: true,
@@ -145,7 +139,6 @@ class DotGame {
                     y: y,
                     board: this.board,
                     area: { you: this.player2area, opponent: this.player1area },
-                    areaPercent: {you: this.player2areaPercent, opponent: this.player1areaPercent}
                 });
             }
             // If player 2 moved
@@ -158,7 +151,6 @@ class DotGame {
                     y: y,
                     board: this.board,
                     area: { you: this.player1area, opponent: this.player2area },
-                    areaPercent: {you: this.player1areaPercent, opponent: this.player2areaPercent}
 
                 });
                 this.player2socket.emit("dot-game-update", {
@@ -168,7 +160,6 @@ class DotGame {
                     y: y,
                     board: this.board,
                     area: { you: this.player2area, opponent: this.player1area },
-                    areaPercent: {you: this.player2areaPercent, opponent: this.player1areaPercent}
                 });
             }
 
@@ -221,33 +212,6 @@ class DotGame {
             this.player2socket.emit("dot-game-over", {
                 winner: "you",
                 reason: "You win by area difference."
-            });
-            await this.recordResult(this.player2username, this.player1username);
-            clearTimeout(this.timeoutID);
-            return true;
-        }
-        // Area percentage wins
-        else if (this.player1areaPercent >= AREA_PERCENTAGE_WIN) {
-            this.player1socket.emit("dot-game-over", {
-                winner: "you",
-                reason: "You win by area percentage."
-            });
-            this.player2socket.emit("dot-game-over", {
-                winner: "opponent",
-                reason: "Opponent wins by area percentage."
-            });
-            await this.recordResult(this.player1username, this.player2username);
-            clearTimeout(this.timeoutID);
-            return true;
-        }
-        else if (this.player2areaPercent >= AREA_PERCENTAGE_WIN) {
-            this.player1socket.emit("dot-game-over", {
-                winner: "opponent",
-                reason: "Opponent wins by area percentage."
-            });
-            this.player2socket.emit("dot-game-over", {
-                winner: "you",
-                reason: "You win by area percentage."
             });
             await this.recordResult(this.player2username, this.player1username);
             clearTimeout(this.timeoutID);
@@ -308,6 +272,54 @@ class DotGame {
                 clearTimeout(this.timeoutID);
                 return true;
             }
+        }
+        // Check if the board is full
+        else {
+            for (let i = 0; i < BOARD_SIZE; i++) {
+                for (let j = 0; j < BOARD_SIZE; j++) {
+                    // If empty spot, return false (not game over)
+                    if (this.board[i][j] === 0) {
+                        return;
+                    }
+                }
+            }
+            // Otherwise, the board is full
+            // Check who has more area
+            if (this.player1area > this.player2area) {
+                this.player1socket.emit("dot-game-over", {
+                    winner: "you",
+                    reason: "You win by area difference."
+                });
+                this.player2socket.emit("dot-game-over", {
+                    winner: "opponent",
+                    reason: "Opponent wins by area difference."
+                });
+                await this.recordResult(this.player1username, this.player2username);
+            }
+            else if (this.player2area > this.player1area) {
+                this.player1socket.emit("dot-game-over", {
+                    winner: "opponent",
+                    reason: "Opponent wins by area difference."
+                });
+                this.player2socket.emit("dot-game-over", {
+                    winner: "you",
+                    reason: "You win by area difference."
+                });
+                await this.recordResult(this.player2username, this.player1username);
+            }
+            else {
+                this.player1socket.emit("dot-game-over", {
+                    winner: "none",
+                    reason: "The game is a draw."
+                });
+                this.player1socket.emit("dot-game-over", {
+                    winner: "none",
+                    reason: "The game is a draw."
+                });
+                await this.recordResult(this.player1username, this.player2username);
+            }
+            clearTimeout(this.timeoutID);
+            return true;
         }
         return false;
     }
